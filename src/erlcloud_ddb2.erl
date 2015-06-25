@@ -975,6 +975,11 @@ undynamize_index_status(<<"UPDATING">>, _) -> updating;
 undynamize_index_status(<<"DELETING">>, _) -> deleting;
 undynamize_index_status(<<"ACTIVE">>, _)   -> active.
 
+undynamize_stream_view_type(<<"OLD_IMAGE">>, _) -> old_image;
+undynamize_stream_view_type(<<"NEW_IMAGE">>, _) -> new_image;
+undynamize_stream_view_type(<<"NEW_AND_OLD_IMAGES">>, _) -> new_and_old_images;
+undynamize_stream_view_type(<<"KEYS_ONLY">>, _) -> keys_only.
+
 -spec global_secondary_index_description_record() -> record_desc().
 global_secondary_index_description_record() ->
     {#ddb2_global_secondary_index_description{},
@@ -1009,6 +1014,13 @@ provisioned_throughput_description_record() ->
       {<<"WriteCapacityUnits">>, #ddb2_provisioned_throughput_description.write_capacity_units, fun id/2}
      ]}.
 
+-spec stream_specification_description_record() -> record_desc().
+stream_specification_description_record() ->
+    {#ddb2_stream_specification_description{},
+     [{<<"StreamEnabled">>, #ddb2_stream_specification_description.stream_enabled, fun id/2},
+      {<<"StreamViewType">>, #ddb2_stream_specification_description.stream_view_type, fun undynamize_stream_view_type/2}
+     ]}.
+
 -spec table_description_record() -> record_desc().
 table_description_record() ->
     {#ddb2_table_description{},
@@ -1024,7 +1036,10 @@ table_description_record() ->
        fun(V, Opts) -> undynamize_record(provisioned_throughput_description_record(), V, Opts) end},
       {<<"TableName">>, #ddb2_table_description.table_name, fun id/2},
       {<<"TableSizeBytes">>, #ddb2_table_description.table_size_bytes, fun id/2},
-      {<<"TableStatus">>, #ddb2_table_description.table_status, fun undynamize_table_status/2}
+      {<<"TableStatus">>, #ddb2_table_description.table_status, fun undynamize_table_status/2},
+      {<<"StreamSpecification">>, #ddb2_table_description.stream_specification,
+       fun(V, Opts) -> undynamize_record(stream_specification_description_record(), V, Opts) end},
+      {<<"LatestStreamId">>, #ddb2_table_description.latest_stream_id, fun id/2}
      ]}.
 
 %%%------------------------------------------------------------------------------
@@ -1305,6 +1320,18 @@ dynamize_local_secondary_index(HashKey, {IndexName, RangeKey, Projection}) ->
      {<<"KeySchema">>, dynamize_key_schema({HashKey, RangeKey})},
      {<<"Projection">>, dynamize_projection(Projection)}].
 
+dynamize_stream_view_type(old_image) -> <<"OLD_IMAGE">>;
+dynamize_stream_view_type(new_image) -> <<"NEW_IMAGE">>;
+dynamize_stream_view_type(new_and_old_images) -> <<"NEW_AND_OLD_IMAGES">>;
+dynamize_stream_view_type(keys_only) -> <<"KEYS_ONLY">>.
+
+dynamize_stream_specification({false}) ->
+    [{<<"StreamEnabled">>, false}];
+
+dynamize_stream_specification({true, StreamViewType}) ->
+    [{<<"StreamEnabled">>, true},
+     {<<"StreamViewType">>, dynamize_stream_view_type(StreamViewType)}].
+
 -spec dynamize_local_secondary_indexes(key_schema(), local_secondary_indexes()) -> jsx:json_term().
 dynamize_local_secondary_indexes({HashKey, _RangeKey}, Value) ->
     dynamize_maybe_list(fun(I) -> dynamize_local_secondary_index(HashKey, I) end, Value).
@@ -1322,7 +1349,9 @@ create_table_opts(KeySchema) ->
     [{local_secondary_indexes, <<"LocalSecondaryIndexes">>, 
       fun(V) -> dynamize_local_secondary_indexes(KeySchema, V) end},
      {global_secondary_indexes, <<"GlobalSecondaryIndexes">>,
-      fun(V) -> dynamize_global_secondary_indexes(V) end}].
+      fun(V) -> dynamize_global_secondary_indexes(V) end},
+     {stream_specification, <<"StreamSpecification">>,
+      fun(V) -> dynamize_stream_specification(V) end}].
 
 -spec create_table_record() -> record_desc().
 create_table_record() ->
@@ -2177,7 +2206,9 @@ update_table_opts() ->
      {global_secondary_index_updates, <<"GlobalSecondaryIndexUpdates">>,
       fun dynamize_global_secondary_index_updates/1},
      {provisioned_throughput, <<"ProvisionedThroughput">>,
-        fun dynamize_provizioned_throughput/1}].
+        fun dynamize_provizioned_throughput/1},
+     {stream_specification, <<"StreamSpecification">>,
+        fun dynamize_stream_specification/1}].
 
 -spec update_table_record() -> record_desc().
 update_table_record() ->
