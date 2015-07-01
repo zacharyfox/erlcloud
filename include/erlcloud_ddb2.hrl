@@ -39,6 +39,10 @@
          key_schema :: erlcloud_ddb2:key_schema(),
          projection :: erlcloud_ddb2:projection()
         }).
+-record(ddb2_stream_specification_description,
+        {stream_enabled :: boolean(),
+         stream_view_type :: new_image | old_image | new_and_old_images | keys_only
+        }).
 -record(ddb2_table_description,
         {attribute_definitions :: erlcloud_ddb2:attr_defs(),
          creation_date_time :: number(),
@@ -49,7 +53,9 @@
          provisioned_throughput :: #ddb2_provisioned_throughput_description{},
          table_name :: binary(),
          table_size_bytes :: integer(),
-         table_status :: table_status()
+         table_status :: table_status(),
+         stream_specification :: #ddb2_stream_specification_description{},
+         latest_stream_id :: binary()
         }).
 -record(ddb2_consumed_capacity,
         {capacity_units :: number(),
